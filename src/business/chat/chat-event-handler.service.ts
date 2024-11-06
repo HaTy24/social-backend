@@ -4,7 +4,6 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
 import {
   ImageProcessedEvent,
   ImageRejectedEvent,
@@ -33,7 +32,6 @@ export class ChatEventHandlerService {
   constructor(
     protected configService: ConfigService,
     protected chatService: ChatService,
-    protected blockchainWrapperService: BlockchainWrapperService,
     protected messageService: MessageService,
 
     @Inject(INJECTION_TOKEN.AUDIT_SERVICE)
@@ -70,65 +68,6 @@ export class ChatEventHandlerService {
           logId: event.logId,
           message: error.message,
           action: APP_ACTION.CREATE_CHAT,
-          payload: event,
-        }),
-      );
-    }
-  }
-
-  @OnEvent(APP_EVENT.SHARE_SOLD)
-  public async handleSharesSoldEvent(event: SharesSoldEvent): Promise<void> {
-    try {
-      this.logger.debug(`[${event.logId}]: Handle shares sold event`);
-
-      const result = await this.blockchainWrapperService.viewUserSharesCount(
-        event.logId,
-        event.sellerAddress,
-      );
-      if (!result.success) {
-        return;
-      }
-
-      const data = result.data;
-
-      const shareHoldingCount =
-        data.holdingAddresses.find(
-          (holding) => holding.address === event.ownerAddress.toLowerCase(),
-        )?.count || 0;
-
-      const shareHeldCount =
-        data.holderAddresses.find(
-          (holder) => holder.address === event.ownerAddress.toLowerCase(),
-        )?.count || 0;
-
-      if (shareHoldingCount > 0 || shareHeldCount > 0) {
-        return;
-      }
-
-      const chat = await this.chatService.getOne({
-        participants: { $all: [event.ownerId, event.sellerId] },
-      });
-      if (!chat) {
-        this.auditService.emitLog(
-          new ErrorLog({
-            logId: event.logId,
-            message: 'chat not found',
-            action: APP_ACTION.REMOVE_CHAT,
-            payload: event,
-          }),
-        );
-        return;
-      }
-
-      await this.chatService.removeChat({ logId: event.logId }, chat._id);
-    } catch (error) {
-      this.logger.error(error.message, error.stack);
-
-      this.auditService.emitLog(
-        new ErrorLog({
-          logId: event.logId,
-          message: error.message,
-          action: APP_ACTION.REMOVE_CHAT,
           payload: event,
         }),
       );

@@ -1,28 +1,57 @@
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
+import { createId } from '@paralleldrive/cuid2';
+import { IsEnum, IsNotEmpty } from 'class-validator';
+import { HttpResponse } from 'mvc-common-toolkit';
+
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Logger,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
+
+import { RequestUser } from '@core/decorators/request-user';
+import { UsePaginationQuery } from '@core/dto/pagination.dto';
+import { ResponseCode } from '@core/dto/response';
+import { LogId } from '@core/logging/logging';
+
 import { TagUserEvent } from '@business/event/event.model';
 import { ImageService } from '@business/image/image.service';
 import { MessageQueueService } from '@business/message-queue/message-queue.service';
 import { NOTIFICATION_TYPE } from '@business/notifications/notification.model';
 import { NotificationService } from '@business/notifications/notification.service';
 import { CreatePostDTO, GetRecentPostsDTO } from '@business/post/post.dto';
-import { POST_POLICY, POST_TYPE, PostDocument, Post as PostModel } from '@business/post/post.model';
+import {
+  POST_POLICY,
+  POST_TYPE,
+  PostDocument,
+  Post as PostModel,
+} from '@business/post/post.model';
 import { PostService } from '@business/post/post.service';
 import { PostView } from '@business/post/post.type';
 import { User, extractPublicInfo } from '@business/user/user.entity';
 import { UserService } from '@business/user/user.service';
-import { RequestUser } from '@core/decorators/request-user';
-import { UsePaginationQuery } from '@core/dto/pagination.dto';
-import { ResponseCode } from '@core/dto/response';
-import { LogId } from '@core/logging/logging';
-import { Body, Controller, Delete, Get, Logger, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ApiBearerAuth, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { createId } from '@paralleldrive/cuid2';
-import { APP_EVENT, ERR_CODE, IMG_TASK_GOAL, IMG_TASK_TYPE, SOURCE_TYPE } from '@shared/constants';
-import { extractTagUserFromText, extractTagsFromText } from '@shared/helpers/tags-helper';
+
+import {
+  APP_EVENT,
+  ERR_CODE,
+  IMG_TASK_GOAL,
+  IMG_TASK_TYPE,
+  SOURCE_TYPE,
+} from '@shared/constants';
+import {
+  extractTagUserFromText,
+  extractTagsFromText,
+} from '@shared/helpers/tags-helper';
 import { cleanHTML } from '@shared/helpers/text-cleaning-helper';
-import { IsEnum, IsNotEmpty } from 'class-validator';
-import { HttpResponse } from 'mvc-common-toolkit';
+
 import { AuthGuard } from '../auth/auth.guard';
 
 class PolicyDto {
@@ -47,10 +76,9 @@ export class PostController {
     private imageService: ImageService,
     private userService: UserService,
     protected messageQueueService: MessageQueueService,
-    private blockchainService: BlockchainWrapperService,
     protected eventEmitter: EventEmitter2,
     protected notificationService: NotificationService,
-  ) { }
+  ) {}
 
   @UsePaginationQuery()
   @Get('recent')
@@ -68,31 +96,14 @@ export class PostController {
     });
 
     const mappedPosts: PostView[] = await Promise.all(
-      paginateResult.rows.map(
-        async (post: PostDocument): Promise<PostView> => {
-        const {
-            likesCount,
-            viewerInteractions,
-            commentCount,
-            retweetCount,
-          } = await this.postService.getPostInteractions({
+      paginateResult.rows.map(async (post: PostDocument): Promise<PostView> => {
+        const { likesCount, viewerInteractions, commentCount, retweetCount } =
+          await this.postService.getPostInteractions({
             slug: post.slug,
             viewerId,
           });
 
         const postOwner = await this.userService.getOneByKey(post.ownerId);
-        const balanceResponse =
-            await this.blockchainService.viewUserBalance(
-          logId,
-          postOwner.walletAddress,
-        );
-
-        const sharePriceResult = await this.blockchainService.viewSharesPrice(
-          logId,
-          postOwner.walletAddress,
-        );
-        const { buyPrice = '0', sellPrice = '0' } = sharePriceResult.data || {};
-        const share = { buyPrice, sellPrice };
 
         return {
           actions: viewerInteractions,
@@ -106,14 +117,16 @@ export class PostController {
           text: post.text,
           user: {
             ...extractPublicInfo(postOwner),
-            balance: balanceResponse.data,
+            balance: '0',
             imageUrl: postOwner.profile_image_url,
             username: postOwner.twitterScreenName,
-            share,
+            share: {
+              buyPrice: '0',
+              sellPrice: '0',
+            },
           },
         };
-      },
-      ),
+      }),
     );
 
     return {
@@ -132,7 +145,7 @@ export class PostController {
     @RequestUser() user: User,
   ): Promise<HttpResponse> {
     const viewerId = user.id;
-    const data = await this.postService.viewPost(logId, { slug, viewerId, });
+    const data = await this.postService.viewPost(logId, { slug, viewerId });
     if (!data) {
       return {
         success: false,
@@ -140,7 +153,7 @@ export class PostController {
         code: ResponseCode.NOT_FOUND,
       };
     }
-    return { success: true, data, };
+    return { success: true, data };
   }
 
   @Post(':slug/retweet')
@@ -159,7 +172,12 @@ export class PostController {
     }
     const retweet = await this.postService.createRetweet(user.id, slug);
 
-    await this.notificationService.postNotification(user, originalPost, retweet, NOTIFICATION_TYPE.POST_SHARE);
+    await this.notificationService.postNotification(
+      user,
+      originalPost,
+      retweet,
+      NOTIFICATION_TYPE.POST_SHARE,
+    );
     return { success: true };
   }
 
@@ -203,7 +221,10 @@ export class PostController {
     const createdPost = await this.postService.create({
       type: POST_TYPE.TWEET,
       ownerId: user.id,
-      media: dto.media && dto.media.length ? dto.media.map(media => ({ original: media })) : [],
+      media:
+        dto.media && dto.media.length
+          ? dto.media.map((media) => ({ original: media }))
+          : [],
       policy: dto.policy,
       text: cleanedText,
       slug: createId(),
@@ -241,7 +262,8 @@ export class PostController {
     if (dto.media && dto.media.length) {
       await Promise.all(
         dto.media.map(async (imageUrl: string, index: number) => {
-          await this.messageQueueService.publishMessage(JSON.stringify({
+          await this.messageQueueService.publishMessage(
+            JSON.stringify({
               sourceType: SOURCE_TYPE.POST,
               imageIndex: index,
               postSlug: createdPost.slug,
@@ -249,7 +271,8 @@ export class PostController {
               fileURL: imageUrl,
               type: IMG_TASK_TYPE.USER_UPLOAD,
               goal: IMG_TASK_GOAL.RESIZE_AND_COMPRESS,
-            }))
+            }),
+          );
         }),
       );
     }
@@ -262,7 +285,7 @@ export class PostController {
     @LogId() logId: string,
     @Param('slug') slug: string,
     @RequestUser() user: User,
-    @Body() dto: PolicyDto
+    @Body() dto: PolicyDto,
   ) {
     const post = await this.postService.getOne({ slug });
     if (!post) {
@@ -281,7 +304,9 @@ export class PostController {
       };
     }
 
-    await this.postService.updateById(post._id.toString(), { policy: dto.policy });
+    await this.postService.updateById(post._id.toString(), {
+      policy: dto.policy,
+    });
     return { success: true };
   }
 
@@ -310,17 +335,5 @@ export class PostController {
 
     await this.postService.forceDeleteBySlug(foundPost.slug);
     return { success: true };
-  }
-
-  async canView(logId: string, post: { ownerId: string, policy: POST_POLICY }, viewerId: string) {
-    if (!post) return false;
-    if (post.policy === POST_POLICY.PUBLIC) return true;
-    if (viewerId === post.ownerId) return true;
-    const viewer = await this.userService.getById(viewerId);
-    if (!viewer) return false;
-    const owner = await this.userService.getById(post.ownerId);
-    const viewerShare = await this.blockchainService.viewUserSharesCount(logId, viewer.walletAddress);
-
-    return !!viewerShare?.data?.holdingAddresses?.find(holding => holding.address.toLowerCase() === owner.walletAddress.toLowerCase());
   }
 }

@@ -1,18 +1,31 @@
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
-import { UserService } from '@business/user/user.service';
-import { PaginationDTO } from '@core/dto/pagination.dto';
+import { createId } from '@paralleldrive/cuid2';
+import { Connection, Model } from 'mongoose';
+
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectConnection, InjectModel } from '@nestjs/mongoose';
-import { createId } from '@paralleldrive/cuid2';
+
+import { PaginationDTO } from '@core/dto/pagination.dto';
+
+import { UserService } from '@business/user/user.service';
+
 import { extractTagsFromText } from '@shared/helpers/tags-helper';
 import { BaseCRUDService } from '@shared/services/base-crud-service';
 import { PostInteractionData } from '@shared/types';
-import { Connection, Model } from 'mongoose';
-import { INTERACTION_ACTION, InteractionDocument, } from '../interaction/interaction.model';
+
+import {
+  INTERACTION_ACTION,
+  InteractionDocument,
+} from '../interaction/interaction.model';
 import { InteractionService } from '../interaction/interaction.service';
 import { extractPublicInfo } from '../user/user.entity';
 import { CreatePostDTO } from './post.dto';
-import { POST_POLICY, POST_TYPE, Post, PostDocument, ReplyMetadata } from './post.model';
+import {
+  POST_POLICY,
+  POST_TYPE,
+  Post,
+  PostDocument,
+  ReplyMetadata,
+} from './post.model';
 import { PostView, ViewPostData } from './post.type';
 
 @Injectable()
@@ -25,7 +38,6 @@ export class PostService extends BaseCRUDService {
 
     protected userService: UserService,
     protected interactionService: InteractionService,
-    protected blockchainService: BlockchainWrapperService,
     @InjectConnection() protected connection: Connection,
   ) {
     super(repo);
@@ -43,7 +55,10 @@ export class PostService extends BaseCRUDService {
       policy: POST_POLICY.PUBLIC,
       ownerId: userId,
       slug: createId(),
-      media: dto.media && dto.media.length ? dto.media.map(media => ({ original: media })) : [],
+      media:
+        dto.media && dto.media.length
+          ? dto.media.map((media) => ({ original: media }))
+          : [],
       tags: extractTagsFromText(dto.text),
       text: dto.text,
       replyMetadata: {
@@ -142,25 +157,19 @@ export class PostService extends BaseCRUDService {
     const post = await this.getOne({ slug: data.slug });
     if (!post) return null;
 
-    const { viewerInteractions, likesCount, commentCount, retweetCount } = await this.getPostInteractions(data);
+    const { viewerInteractions, likesCount, commentCount, retweetCount } =
+      await this.getPostInteractions(data);
     const metadata: Record<string, any> = {};
     const postOwner = await this.userService.getOneByKey(post.ownerId);
-    const postOwnerBalance = await this.blockchainService.viewUserBalance(logId, postOwner.walletAddress);
-    const sharePriceResult = await this.blockchainService.viewSharesPrice(
-      logId,
-      postOwner.walletAddress,
-    );
-    const { buyPrice = '0', sellPrice = '0' } = sharePriceResult.data || {};
-    const share = { buyPrice, sellPrice };
-    const mtdt: ReplyMetadata = post.type === POST_TYPE.REPLY ? post.replyMetadata : post.repostMetadata;
+    const mtdt: ReplyMetadata =
+      post.type === POST_TYPE.REPLY ? post.replyMetadata : post.repostMetadata;
 
     if (mtdt?.postSlug) {
       const originalPost = await this.getOne({ slug: mtdt.postSlug });
       if (originalPost) {
-        const isHolderOfOriginalUser = await this.isHolder(logId, data.viewerId, mtdt.ownerId);
-        const canViewOriginalPost = originalPost.policy === POST_POLICY.PUBLIC || isHolderOfOriginalUser;
+        const canViewOriginalPost = originalPost.policy === POST_POLICY.PUBLIC;
         const originalPostOwner = await this.userService.getById(mtdt.ownerId);
-        const originalPostOwnerBalanceResponse = await this.blockchainService.viewUserBalance(logId, originalPostOwner.walletAddress);
+
         metadata.originalPost = {
           type: originalPost.type,
           policy: originalPost.policy,
@@ -169,17 +178,15 @@ export class PostService extends BaseCRUDService {
           media: canViewOriginalPost ? originalPost.media : null,
           createdAt: originalPost.createdAt,
           canView: canViewOriginalPost,
-        }
+        };
         metadata.originalUser = {
           ...extractPublicInfo(originalPostOwner),
-          balance: originalPostOwnerBalanceResponse.data,
+          balance: '0',
           imageUrl: originalPostOwner.profile_image_url,
           username: originalPostOwner.twitterScreenName,
         };
       }
     }
-
-    const canViewPost = post.policy === POST_POLICY.PUBLIC || (await this.isHolder(logId, data.viewerId, post.ownerId))
 
     return {
       actions: viewerInteractions,
@@ -189,17 +196,19 @@ export class PostService extends BaseCRUDService {
       policy: post.policy,
       createdAt: post.createdAt,
       commentCount,
-      media: canViewPost ? post.media : null,
-      text: canViewPost ? post.text : null,
+      media: post.media,
+      text: post.text,
       slug: post.slug,
-      canView: canViewPost,
       metadata,
       user: {
         ...extractPublicInfo(postOwner),
-        balance: postOwnerBalance.data,
+        balance: '0',
         imageUrl: postOwner.profile_image_url,
         username: postOwner.twitterScreenName,
-        share,
+        share: {
+          buyPrice: '0',
+          sellPrice: '0',
+        },
       },
     };
   }
@@ -381,14 +390,5 @@ export class PostService extends BaseCRUDService {
     ]);
 
     return data[0];
-  }
-
-  async isHolder(logId: string, holderId: string, targetId: string) {
-    if (holderId === targetId) return true;
-    const viewer = await this.userService.getById(holderId);
-    const owner = await this.userService.getById(targetId);
-    const viewerShare = await this.blockchainService.viewUserSharesCount(logId, viewer.walletAddress);
-
-    return !!viewerShare?.data?.holdingAddresses?.find(holding => holding.address.toLowerCase() === owner.walletAddress.toLowerCase());
   }
 }

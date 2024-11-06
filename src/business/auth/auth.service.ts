@@ -142,7 +142,6 @@ export class AuthService {
   public async register(
     logId: string,
     data: RegisterDto,
-    { publicKey, serverSecret }: { publicKey: string; serverSecret: string },
   ): Promise<HttpResponse> {
     try {
       const passwordHashed = await bcryptHelper.hash(data.password);
@@ -160,8 +159,6 @@ export class AuthService {
 
       const newUser = await this.userService.save({
         email: data.email.toLowerCase(),
-        walletAddress: publicKey,
-        walletSecret: serverSecret,
         fullname: cleanedFullName,
         profile_image_url: DEFAULT_PROFILE_IMAGE_URL,
         profile_banner_url: DEFAULT_PROFILE_BANNER_URL,

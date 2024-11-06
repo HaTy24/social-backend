@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 
-import { BlockchainModule } from '@business/blockchain/blockchain.module';
 import { OssManagementModule } from '@business/oss-management/oss-management.module';
 import { UserModule } from '@business/user/user.module';
 
@@ -14,7 +13,6 @@ import { PostService } from './post.service';
 @Module({
   imports: [
     InteractionModule,
-    BlockchainModule,
     AuditModule,
     UserModule,
     MongooseModule.forFeature([

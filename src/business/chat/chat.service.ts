@@ -1,11 +1,6 @@
 import { Cache } from 'cache-manager';
 import { Model } from 'mongoose';
-import {
-  AuditService,
-  ErrorLog,
-  OperationResult,
-  stringUtils,
-} from 'mvc-common-toolkit';
+import { AuditService, ErrorLog, OperationResult } from 'mvc-common-toolkit';
 
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { HttpStatus, Inject, Logger } from '@nestjs/common';
@@ -13,7 +8,6 @@ import { InjectModel } from '@nestjs/mongoose';
 
 import { ResponseCode } from '@core/dto/response';
 
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
 import { User } from '@business/user/user.entity';
 import { UserService } from '@business/user/user.service';
 
@@ -40,7 +34,6 @@ export class ChatService extends BaseCRUDService {
 
     protected messageService: MessageService,
     protected userService: UserService,
-    protected blockchainService: BlockchainWrapperService,
 
     @Inject(CACHE_MANAGER) private cacheService: Cache,
     @Inject(INJECTION_TOKEN.AUDIT_SERVICE)
@@ -215,28 +208,12 @@ export class ChatService extends BaseCRUDService {
           };
         }
 
-        const logId = stringUtils.generateRandomId();
-
-        const viewUserBalance = await this.blockchainService.viewUserBalance(
-          logId,
-          foundUser.walletAddress,
-        );
-
-        const sharePriceResult = await this.blockchainService.viewSharesPrice(
-          logId,
-          foundUser.walletAddress,
-        );
-        const { buyPrice = '0', sellPrice = '0' } = sharePriceResult.data || {};
-        const share = { buyPrice, sellPrice };
-
         return {
           id: foundUser.id,
           fullName: foundUser.fullname,
           twitterScreenName: foundUser.twitterScreenName,
           imageUrl: foundUser.profile_image_url,
           status: foundUser.status,
-          balance: viewUserBalance.success ? viewUserBalance.data : '0',
-          share,
         };
       }),
     );

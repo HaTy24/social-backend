@@ -29,7 +29,6 @@ import { UsePaginationQuery } from '@core/dto/pagination.dto';
 import { ResponseCode } from '@core/dto/response';
 import { LogId } from '@core/logging/logging';
 
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
 import {
   EmailUpdatedEvent,
   UserUpdatedEvent,
@@ -127,7 +126,6 @@ export class ProfileController {
   constructor(
     private userService: UserService,
     private imageService: ImageService,
-    private blockchainService: BlockchainWrapperService,
     protected eventEmitter: EventEmitter2,
 
     @Inject(CACHE_MANAGER) private cacheService: Cache,
@@ -147,37 +145,11 @@ export class ProfileController {
       };
     }
 
-    let share = null;
-    const sharePriceResult = await this.blockchainService.viewSharesPrice(
-      logId,
-      user.walletAddress,
-    );
-    if (sharePriceResult?.success) {
-      const { buyPrice, sellPrice } = sharePriceResult.data;
-      share = { buyPrice, sellPrice };
-    }
-    const balance = (
-      await this.blockchainService.viewUserBalance(logId, user.walletAddress)
-    ).data;
-    const tradingVolume = (
-      await this.blockchainService.viewUserTradingVolume(
-        logId,
-        user.walletAddress,
-      )
-    ).data;
-    const earned = (
-      await this.blockchainService.viewUserEarnedFees(logId, user.walletAddress)
-    ).data;
-
     const isPinSet = !!user.pinSecret;
 
     const userProfile = {
       ...extractPublicInfo(user),
       referral: user?.referral,
-      share,
-      balance,
-      tradingVolume,
-      earned,
       isPinSet,
     };
 
@@ -349,152 +321,6 @@ export class ProfileController {
     );
 
     return { success: true };
-  }
-
-  @Patch('referral')
-  async setReferral(
-    @LogId() logId: string,
-    @RequestUser() user: User,
-    @Body() body: ReferralDto,
-  ): Promise<HttpResponse> {
-    body.referral = body.referral?.toUpperCase();
-    if (user.referral) return { success: false, code: ResponseCode.CONFLICT };
-    if ([user.walletAddress, user.referral_code].includes(body.referral)) {
-      return {
-        success: false,
-        code: ResponseCode.SELF_REFERRAL_IS_NOT_ALLOWED,
-      };
-    }
-
-    let refUser = await this.userService.findOne({
-      referral_code: body.referral,
-    });
-    if (!refUser) {
-      refUser = await this.userService.getByWalletAddress(body.referral);
-    }
-
-    if (!refUser) return { success: false, code: ResponseCode.NOT_FOUND };
-
-    const result = await this.blockchainService.setReferralData(
-      logId,
-      refUser.walletAddress,
-      user.walletAddress,
-    );
-
-    if (result.success) {
-      await this.userService.updateById(user.id, {
-        referral: refUser.referral_code,
-      });
-    }
-
-    return { success: result.success, message: result.message };
-  }
-
-  @UsePaginationQuery()
-  @Get('trades')
-  async getTransactions(
-    @LogId() logId: string,
-    @RequestUser() user: User,
-    @Query() query: TradeHistoryDTO,
-  ) {
-    const tradesResult = await this.blockchainService.viewUserTradeHistory(
-      logId,
-      {
-        address: user.walletAddress,
-        type: query.type || SHARES_TRADE_TYPE.NORMAL,
-      },
-      query.limit,
-      query.offset,
-    );
-    if (!tradesResult)
-      return { success: false, code: ResponseCode.INTERNAL_SERVER_ERROR };
-    const { success, data, code } = tradesResult;
-
-    if (Array.isArray(data?.items)) {
-      const { items, totalCount } = data;
-      const where = {
-        walletAddress: In(items.map((item) => item.ownerAddress.toLowerCase())),
-      };
-      const allUser = (await this.userService.find({ where })).map(
-        extractPublicInfo,
-      );
-
-      const rows = await Promise.all(
-        items.map(async (trade) => {
-          const { ownerAddress } = trade;
-          const owner = allUser.find(
-            (u) => u.walletAddress === ownerAddress.toLowerCase(),
-          );
-
-          return { ...trade, owner };
-        }),
-      );
-
-      return { success, data: { total: totalCount, rows }, code };
-    }
-
-    return { success, data, code };
-  }
-
-  @Post('export-private-key')
-  async exportPrivateKey(
-    @LogId() logId: string,
-    @RequestUser() user: User,
-    @Body() body: ExportPrivateKeyDTO,
-  ) {
-    const foundUser = await this.userService.getById(user.id);
-    if (!foundUser.pinSecret) {
-      return {
-        success: false,
-        message: 'pin not yet set',
-        httpCode: HttpStatus.CONFLICT,
-      };
-    }
-
-    const validatePinResult = await this.userService.validatePin(
-      user.id,
-      body.pin,
-    );
-
-    if (!validatePinResult.success) {
-      return validatePinResult;
-    }
-
-    const { isValid, isLocked, attemptsLeft } = validatePinResult.data;
-
-    if (!isValid) {
-      return isLocked
-        ? {
-            success: false,
-            code: ERR_CODE.USER_LOCKED,
-            message: 'you have been locked!',
-            httpCode: HttpStatus.FORBIDDEN,
-          }
-        : {
-            success: false,
-            message: 'Invalid PIN',
-            data: { attemptsLeft },
-            code: ERR_CODE.INVALID_PIN,
-            httpCode: HttpStatus.FORBIDDEN,
-          };
-    }
-
-    const { walletSecret, walletAddress } = foundUser;
-
-    const exportResult = await this.blockchainService.exportPrivateKey(
-      logId,
-      walletAddress,
-      walletSecret,
-    );
-
-    if (!exportResult.success) {
-      return exportResult;
-    }
-
-    return {
-      success: true,
-      data: exportResult.data,
-    };
   }
 
   @Post('pin')

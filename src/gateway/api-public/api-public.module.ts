@@ -6,7 +6,6 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 
 import { AuditModule } from '@business/audit/audit.module';
-import { BlockchainModule } from '@business/blockchain/blockchain.module';
 import { InteractionModule } from '@business/interaction/interaction.module';
 import { PostModule } from '@business/post/post.module';
 import { UserModule } from '@business/user/user.module';
@@ -33,7 +32,6 @@ import { TwitterService } from '../api-client/services/twitter.service';
       },
     }),
     AuditModule,
-    BlockchainModule,
     UserModule,
     PostModule,
     InteractionModule,

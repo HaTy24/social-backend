@@ -18,12 +18,10 @@ import { UserModule } from '@business/user/user.module';
 import { ENV_KEY } from '@shared/constants';
 
 import { AdminAccountTypeConfigController } from './controllers/admin-account-type-config.controller';
-import { AnalyticController } from './controllers/admin-analytic.controller';
 import { AdminFeedbackController } from './controllers/admin-feedback.controller';
 import { AdminPostController } from './controllers/admin-post.controller';
 import { AdminPrePostController } from './controllers/admin-pre-post.controller';
 import { AdminSystemAccountController } from './controllers/admin-system-account.controller';
-import { AdminTransactionController } from './controllers/admin-transaction.controller';
 import { AdminUserController } from './controllers/admin-user.controller';
 import { AdminController } from './controllers/admin.controller';
 import { AdminAuthController } from './controllers/auth.controller';
@@ -67,8 +65,6 @@ const logger = new Logger('ApiAdminModule');
     AdminPostController,
     AdminFeedbackController,
     AdminSystemAccountController,
-    AdminTransactionController,
-    AnalyticController,
     AdminAccountTypeConfigController,
     AdminPrePostController,
   ],

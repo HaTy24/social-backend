@@ -8,7 +8,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { AccountTypeConfigModule } from '@business/account-type-config/account-type-config.module';
 import { AuditModule } from '@business/audit/audit.module';
 import { AuthModule } from '@business/auth/auth.module';
-import { BlockchainModule } from '@business/blockchain/blockchain.module';
 import { ChatModule } from '@business/chat/chat.module';
 import { FeedbackModule } from '@business/feedback/feedback.module';
 import { GameTransactionModule } from '@business/game-transaction/game-transaction.module';
@@ -26,16 +25,13 @@ import { WebsocketModule } from '@business/websocket/websocket.module';
 import { AuthController } from './controllers/auth.controller';
 import { ChatController } from './controllers/chat.controller';
 import { FeedbackController } from './controllers/feedback.controller';
-import { GameController } from './controllers/game.controller';
 import { IntegrationController } from './controllers/integration.controller';
 import { NotificationController } from './controllers/notification.controller';
 import { OtherController } from './controllers/other.controller';
 import { PostInteractionController } from './controllers/post-interaction.controller';
 import { PostController } from './controllers/post.controller';
 import { ProfileController } from './controllers/profile.controller';
-import { TransactionController } from './controllers/transactions.controller';
 import { UsersController } from './controllers/users.controller';
-import { VoteController } from './controllers/vote.controller';
 import { GoogleService } from './services/google.service';
 import { TwitterService } from './services/twitter.service';
 
@@ -64,7 +60,6 @@ const logger = new Logger('ApiClientModule');
     }),
     HttpModule,
     AuditModule,
-    BlockchainModule,
     UserModule,
     PostModule,
     UserGameAccountModule,
@@ -86,12 +81,9 @@ const logger = new Logger('ApiClientModule');
     ProfileController,
     PostController,
     PostInteractionController,
-    TransactionController,
     NotificationController,
-    VoteController,
     UsersController,
     FeedbackController,
-    GameController,
     OtherController,
     ChatController,
     IntegrationController,

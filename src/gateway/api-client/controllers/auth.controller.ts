@@ -28,8 +28,6 @@ import {
   VerifyEmailDto,
 } from '@business/auth/auth.dto';
 import { AuthService } from '@business/auth/auth.service';
-import { BlockchainWrapperService } from '@business/blockchain/services/blockchain-wrapper.service';
-import { BlockchainProfileService } from '@business/blockchain/services/bockchain-profile.service';
 import { UserUpdatedEvent } from '@business/event/event.model';
 import {
   DEFAULT_PROFILE_BANNER_URL,
@@ -65,8 +63,6 @@ export class AuthController {
     private twitterService: TwitterService,
     protected authService: AuthService,
     protected configService: ConfigService,
-    private blockchainService: BlockchainWrapperService,
-    private blockchainProfileService: BlockchainProfileService,
     private googleService: GoogleService,
 
     protected eventEmitter: EventEmitter2,
@@ -115,47 +111,16 @@ export class AuthController {
       if (!twitterUserResult?.success)
         return { success: false, code: ResponseCode.TWITTER_USER_NOT_FOUND };
 
-      const getPrivateKeyResponse = await this.blockchainService.genNewKey(
-        logId,
-      );
-
-      if (!getPrivateKeyResponse.success) {
-        this.logger.error(
-          `[${logId}]: get private key for new user: ` +
-            getPrivateKeyResponse.message,
-        );
-        return { success: false, code: ResponseCode.INTERNAL_SERVER_ERROR };
-      }
-
-      const { publicKey, serverSecret } = getPrivateKeyResponse.data;
-
       const { name, location, description } = twitterUserResult.data;
 
       user = await this.userService.save({
         referral_code: genReferralCode(),
         twitterId: user_id,
         twitterScreenName: screen_name,
-        walletAddress: publicKey,
-        walletSecret: serverSecret,
         fullname: name || screen_name,
         location,
         description,
         profile_banner_url: DEFAULT_PROFILE_BANNER_URL,
-      });
-      await this.blockchainProfileService.save({
-        userId: user.id,
-        walletAddress: user.walletAddress.toLowerCase(),
-        isVote: user.is_voting,
-        balance: 0,
-        tradingVolume: 0,
-        earned: 0,
-        referralFee: 0,
-        subjectFee: 0,
-        sold: user.shared,
-        bought: 0,
-        holder: 0,
-        holding: 0,
-        lastActivity: user.updatedAt,
       });
     }
 
@@ -239,21 +204,7 @@ export class AuthController {
       }
     }
 
-    const getPrivateKeyResponse = await this.blockchainService.genNewKey(logId);
-    if (!getPrivateKeyResponse.success) {
-      this.logger.error(
-        `[${logId}]: get private key for new user: ` +
-          getPrivateKeyResponse.message,
-      );
-      return getPrivateKeyResponse;
-    }
-
-    const { publicKey, serverSecret } = getPrivateKeyResponse.data;
-
-    const registerResult = await this.authService.register(logId, body, {
-      publicKey,
-      serverSecret,
-    });
+    const registerResult = await this.authService.register(logId, body);
     if (!registerResult.success) {
       return registerResult;
     }
@@ -549,19 +500,6 @@ export class AuthController {
         };
       }
 
-      const getPrivateKeyResponse = await this.blockchainService.genNewKey(
-        logId,
-      );
-      if (!getPrivateKeyResponse.success) {
-        this.logger.error(
-          `[${logId}]: get private key for new user: ` +
-            getPrivateKeyResponse.message,
-        );
-        return { success: false, code: ResponseCode.INTERNAL_SERVER_ERROR };
-      }
-
-      const { publicKey, serverSecret } = getPrivateKeyResponse.data;
-
       const rd = Math.floor(Math.random() * 1000000)
         .toString()
         .padStart(6, '0');
@@ -575,8 +513,6 @@ export class AuthController {
         twitterScreenName,
         googleId: sub,
         email,
-        walletAddress: publicKey,
-        walletSecret: serverSecret,
         fullname: name,
         profile_banner_url: DEFAULT_PROFILE_BANNER_URL,
       });
