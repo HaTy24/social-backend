@@ -1,0 +1,1 @@
+CREATE INDEX users_metadata_idx ON users USING gin (metadata);
